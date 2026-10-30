@@ -66,7 +66,10 @@ public:
     void showHint(std::string errorHint);
     bool debugMode();
     [[nodiscard]] bool backgroundMode() const;
-    [[nodiscard]] bool startupCancelled() const { return _startupCancelled; }
+    [[nodiscard]] bool isStartupCancelled() const
+    {
+        return _startupCancelled;
+    }
     bool versionOnly(); // only display the version?
     void showVersion();
 

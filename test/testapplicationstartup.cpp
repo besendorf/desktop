@@ -14,12 +14,17 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+using namespace Qt::StringLiterals;
+
 class TestApplicationStartup : public QObject
 {
     Q_OBJECT
 
-    static void startClient(QProcess &client, const QString &configDir, const bool activated,
-        const QStringList &options = {}, const bool waitForTray = false)
+    static constexpr auto _startupTimeoutMs = 10000;
+    static constexpr auto _startupObservationMs = 3000;
+    static constexpr auto _accountSettingsVersion = 13;
+
+    static void startClient(QProcess &client, const QString &configDir, const bool activated, const QStringList &options = {}, const bool waitForTray = false)
     {
         auto environment = QProcessEnvironment::systemEnvironment();
         environment.remove("DBUS_STARTER_ADDRESS");
@@ -29,8 +34,8 @@ class TestApplicationStartup : public QObject
             environment.insert("DBUS_STARTER_BUS_TYPE", "session");
         }
         environment.insert("XDG_CONFIG_HOME", configDir);
-        environment.insert("XDG_CACHE_HOME", configDir + QStringLiteral("/cache"));
-        environment.insert("XDG_DATA_HOME", configDir + QStringLiteral("/data"));
+        environment.insert("XDG_CACHE_HOME", configDir + u"/cache"_s);
+        environment.insert("XDG_DATA_HOME", configDir + u"/data"_s);
         environment.insert("XDG_RUNTIME_DIR", configDir);
         environment.insert("XDG_CURRENT_DESKTOP", "XFCE");
         environment.insert("QT_QPA_PLATFORM", "offscreen");
@@ -38,9 +43,8 @@ class TestApplicationStartup : public QObject
         environment.insert("QT_QPA_PLATFORMTHEME", waitForTray ? "" : "appmenu-qt5");
         client.setProcessEnvironment(environment);
         client.setProcessChannelMode(QProcess::MergedChannels);
-        client.start(QStringLiteral(OWNCLOUD_BIN_PATH "/" APPLICATION_EXECUTABLE),
-            QStringList{QStringLiteral("--confdir"), configDir,
-                QStringLiteral("--logfile"), QStringLiteral("-"), QStringLiteral("--logflush")} + options);
+        client.start(QString::fromUtf8(OWNCLOUD_BIN_PATH "/" APPLICATION_EXECUTABLE),
+                     QStringList{u"--confdir"_s, configDir, u"--logfile"_s, u"-"_s, u"--logflush"_s} + options);
     }
 
     static void stopClient(QProcess &client)
@@ -62,7 +66,7 @@ private Q_SLOTS:
         QVERIFY2(!qEnvironmentVariableIsEmpty("DBUS_SESSION_BUS_ADDRESS"), "Run with dbus-run-session");
     }
 
-    void unconfiguredActivation_data()
+    void testStartup_unconfiguredActivation_exitsWithoutGui_data()
     {
         QTest::addColumn<bool>("hasPreferences");
         QTest::addColumn<bool>("background");
@@ -71,7 +75,7 @@ private Q_SLOTS:
         QTest::newRow("activation-without-background") << false << false;
     }
 
-    void unconfiguredActivation()
+    void testStartup_unconfiguredActivation_exitsWithoutGui()
     {
         QFETCH(bool, hasPreferences);
         QFETCH(bool, background);
@@ -79,22 +83,23 @@ private Q_SLOTS:
         QVERIFY(directory.isValid());
         if (hasPreferences) {
             QSettings settings(configFile(directory), QSettings::IniFormat);
-            settings.setValue(QStringLiteral("General/monoIcons"), true);
+            settings.setValue(u"General/monoIcons"_s, true);
             settings.sync();
             QCOMPARE(settings.status(), QSettings::NoError);
         }
         QProcess client;
-        const auto cleanup = qScopeGuard([&] { stopClient(client); });
-        startClient(client, directory.path(), true,
-            background ? QStringList{QStringLiteral("--background")} : QStringList{}, true);
+        const auto cleanup = qScopeGuard([&] {
+            stopClient(client);
+        });
+        startClient(client, directory.path(), true, background ? QStringList{u"--background"_s} : QStringList{}, true);
         QVERIFY(client.waitForStarted());
         // This must finish before XFCE's 30-second tray wait, without entering the GUI event loop.
-        QVERIFY2(client.waitForFinished(10000), client.readAll().constData());
+        QVERIFY2(client.waitForFinished(_startupTimeoutMs), client.readAll().constData());
         QCOMPARE(client.exitStatus(), QProcess::NormalExit);
         QCOMPARE(client.exitCode(), 1);
     }
 
-    void normalStartup_data()
+    void testStartup_manualOrConfigured_keepsRunning_data()
     {
         QTest::addColumn<bool>("activated");
         QTest::addColumn<bool>("configured");
@@ -104,7 +109,7 @@ private Q_SLOTS:
         QTest::newRow("configured-activation") << true << true << true;
     }
 
-    void normalStartup()
+    void testStartup_manualOrConfigured_keepsRunning()
     {
         QFETCH(bool, activated);
         QFETCH(bool, configured);
@@ -113,25 +118,26 @@ private Q_SLOTS:
         QVERIFY(directory.isValid());
         if (configured) {
             QSettings settings(configFile(directory), QSettings::IniFormat);
-            settings.setValue(QStringLiteral("Accounts/version"), 13);
-            settings.setValue(QStringLiteral("Accounts/test/version"), 13);
-            settings.setValue(QStringLiteral("Accounts/test/url"), QStringLiteral("http://127.0.0.1:1"));
-            settings.setValue(QStringLiteral("Accounts/test/authType"), QStringLiteral("webflow"));
-            settings.setValue(QStringLiteral("Accounts/test/webflow_user"), QStringLiteral("alice"));
-            settings.setValue(QStringLiteral("Accounts/test/dav_user"), QStringLiteral("alice"));
+            settings.setValue(u"Accounts/version"_s, _accountSettingsVersion);
+            settings.setValue(u"Accounts/test/version"_s, _accountSettingsVersion);
+            settings.setValue(u"Accounts/test/url"_s, u"http://127.0.0.1:1"_s);
+            settings.setValue(u"Accounts/test/authType"_s, u"webflow"_s);
+            settings.setValue(u"Accounts/test/webflow_user"_s, u"alice"_s);
+            settings.setValue(u"Accounts/test/dav_user"_s, u"alice"_s);
             settings.sync();
             QCOMPARE(settings.status(), QSettings::NoError);
         }
         QProcess client;
-        const auto cleanup = qScopeGuard([&] { stopClient(client); });
-        startClient(client, directory.path(), activated,
-            background ? QStringList{QStringLiteral("--background")} : QStringList{});
+        const auto cleanup = qScopeGuard([&] {
+            stopClient(client);
+        });
+        startClient(client, directory.path(), activated, background ? QStringList{u"--background"_s} : QStringList{});
         QVERIFY(client.waitForStarted());
-        QVERIFY2(!client.waitForFinished(3000), client.readAll().constData());
+        QVERIFY2(!client.waitForFinished(_startupObservationMs), client.readAll().constData());
         QCOMPARE(client.state(), QProcess::Running);
     }
 
-    void activationAllowsProvisioning_data()
+    void testStartup_provisioning_isAllowed_data()
     {
         QTest::addColumn<bool>("loginUri");
         QTest::addColumn<bool>("password");
@@ -140,7 +146,7 @@ private Q_SLOTS:
         QTest::newRow("login-uri") << true << false;
     }
 
-    void activationAllowsProvisioning()
+    void testStartup_provisioning_isAllowed()
     {
         QFETCH(bool, loginUri);
         QFETCH(bool, password);
@@ -149,32 +155,32 @@ private Q_SLOTS:
         QTcpServer server;
         QVERIFY(server.listen(QHostAddress::LocalHost));
         QProcess client;
-        const auto cleanup = qScopeGuard([&] { stopClient(client); });
-        const auto serverUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort());
+        const auto cleanup = qScopeGuard([&] {
+            stopClient(client);
+        });
+        const auto serverUrl = u"http://127.0.0.1:%1"_s.arg(server.serverPort());
         auto options = loginUri
-            ? QStringList{QStringLiteral(APPLICATION_URI_HANDLER_SCHEME "://login/server:") + serverUrl}
-            : QStringList{QStringLiteral("--background"), QStringLiteral("--userid"), QStringLiteral("alice"),
-                QStringLiteral("--serverurl"), serverUrl, QStringLiteral("--localdirpath"),
-                directory.path() + QStringLiteral("/sync")};
+            ? QStringList{QString::fromLatin1(APPLICATION_URI_HANDLER_SCHEME "://login/server:") + serverUrl}
+            : QStringList{u"--background"_s, u"--userid"_s, u"alice"_s, u"--serverurl"_s, serverUrl, u"--localdirpath"_s, directory.path() + u"/sync"_s};
         if (password) {
-            options << QStringLiteral("--apppassword") << QStringLiteral("test-password");
+            options << u"--apppassword"_s << u"test-password"_s;
         }
         startClient(client, directory.path(), true, options);
         QVERIFY(client.waitForStarted());
         if (!loginUri && !password) {
-            QVERIFY2(client.waitForFinished(10000), client.readAll().constData());
+            QVERIFY2(client.waitForFinished(_startupTimeoutMs), client.readAll().constData());
             QCOMPARE(client.exitStatus(), QProcess::NormalExit);
             QVERIFY2(client.exitCode() == 0, client.readAll().constData());
             QSettings settings(configFile(directory), QSettings::IniFormat);
-            settings.beginGroup(QStringLiteral("Accounts"));
+            settings.beginGroup(u"Accounts"_s);
             const auto accounts = settings.childGroups();
             QCOMPARE(accounts.size(), 1);
             settings.beginGroup(accounts.first());
-            QCOMPARE(settings.value(QStringLiteral("url")).toString(), serverUrl);
-            QCOMPARE(settings.value(QStringLiteral("webflow_user")).toString(), QStringLiteral("alice"));
+            QCOMPARE(settings.value(u"url"_s).toString(), serverUrl);
+            QCOMPARE(settings.value(u"webflow_user"_s).toString(), u"alice"_s);
             return;
         }
-        QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), _startupTimeoutMs);
         QCOMPARE(client.state(), QProcess::Running);
     }
 };

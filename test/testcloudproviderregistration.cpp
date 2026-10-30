@@ -18,23 +18,25 @@
 #include <memory>
 
 using namespace OCC;
+using namespace Qt::StringLiterals;
 
 class TestCloudProviderRegistration : public QObject
 {
     Q_OBJECT
 
+    static constexpr auto _registrationObservationMs = 100;
+
     QTemporaryDir _config;
 
     static bool isRegistered()
     {
-        return QDBusConnection::sessionBus().interface()->isServiceRegistered(
-            QStringLiteral(LIBCLOUDPROVIDERS_DBUS_BUS_NAME)).value();
+        return QDBusConnection::sessionBus().interface()->isServiceRegistered(QString::fromLatin1(LIBCLOUDPROVIDERS_DBUS_BUS_NAME)).value();
     }
 
     static void addAccount(const QString &user)
     {
         auto account = Account::create();
-        account->setUrl(QUrl(QStringLiteral("http://127.0.0.1:1")));
+        account->setUrl(QUrl(u"http://127.0.0.1:1"_s));
         account->setDavUser(user);
         account->setCredentials(new FakeCredentials(new FakeQNAM({})));
         AccountManager::instance()->addAccount(account);
@@ -53,25 +55,25 @@ private Q_SLOTS:
         AccountManager::instance()->shutdown();
     }
 
-    void registrationWaitsForFirstAccount()
+    void testRegistration_noAccounts_waitsForFirstAccount()
     {
         auto provider = std::make_unique<CloudProviderManager>();
-        QTest::qWait(100);
+        QTest::qWait(_registrationObservationMs);
         QVERIFY(!isRegistered());
 
-        addAccount(QStringLiteral("alice"));
+        addAccount(u"alice"_s);
         QTRY_VERIFY(isRegistered());
 
-        addAccount(QStringLiteral("bob"));
+        addAccount(u"bob"_s);
         QVERIFY(isRegistered());
 
         provider.reset();
         QTRY_VERIFY(!isRegistered());
     }
 
-    void existingAccountRegistersProvider()
+    void testRegistration_existingAccount_registersImmediately()
     {
-        addAccount(QStringLiteral("alice"));
+        addAccount(u"alice"_s);
         auto provider = std::make_unique<CloudProviderManager>();
         QTRY_VERIFY(isRegistered());
 

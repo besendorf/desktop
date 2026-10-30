@@ -119,7 +119,7 @@ static int runApplication(int argc, char **argv)
         app.showVersion();
         return 0;
     }
-    if (app.startupCancelled()) {
+    if (app.isStartupCancelled()) {
         // Report failed activation so D-Bus does not wait for the service-start timeout.
         return 1;
     }

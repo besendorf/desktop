@@ -437,9 +437,7 @@ Application::Application(int &argc, char **argv)
     setupAccountsAndFolders();
 
 #ifdef Q_OS_LINUX
-    if (!qEnvironmentVariableIsEmpty("DBUS_STARTER_ADDRESS")
-        && AccountManager::instance()->accounts().isEmpty()
-        && _uriSchemeUrl.isEmpty()
+    if (!qEnvironmentVariableIsEmpty("DBUS_STARTER_ADDRESS") && AccountManager::instance()->accounts().isEmpty() && _uriSchemeUrl.isEmpty()
         && !AccountSetupCommandLineManager::instance()->isCommandLineParsed()) {
         qCInfo(lcApplication) << "No configured accounts, ignoring D-Bus activation.";
         _startupCancelled = true;
