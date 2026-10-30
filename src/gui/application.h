@@ -168,6 +168,7 @@ private:
     bool _userTriggeredConnect = false;
     bool _debugMode = false;
     bool _backgroundMode = false;
+    bool _dbusActivation = false;
     bool _startupCancelled = false;
     bool _suppressNextEmptyAccountCheck = false;
     QUrl _uriSchemeUrl;

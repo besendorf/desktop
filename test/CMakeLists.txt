@@ -282,6 +282,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND BUILD_GUI AND NOT BUILD_LIBRARIES_ONLY
             COMMAND "${DBUS_RUN_SESSION_EXECUTABLE}" -- "$<TARGET_FILE:ApplicationStartupTest>"
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
         if(TARGET PkgConfig::CLOUDPROVIDERS)
+            target_include_directories(ApplicationStartupTest PRIVATE "${CMAKE_BINARY_DIR}/src/gui")
+            target_link_libraries(ApplicationStartupTest PRIVATE Qt::DBus)
             nextcloud_build_test(CloudProviderRegistration)
             target_include_directories(CloudProviderRegistrationTest PRIVATE "${CMAKE_BINARY_DIR}/src/gui")
             target_link_libraries(CloudProviderRegistrationTest PRIVATE Qt::DBus)

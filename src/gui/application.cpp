@@ -437,7 +437,7 @@ Application::Application(int &argc, char **argv)
     setupAccountsAndFolders();
 
 #ifdef Q_OS_LINUX
-    if (!qEnvironmentVariableIsEmpty("DBUS_STARTER_ADDRESS") && AccountManager::instance()->accounts().isEmpty() && _uriSchemeUrl.isEmpty()
+    if ((_dbusActivation || !qEnvironmentVariableIsEmpty("DBUS_STARTER_ADDRESS")) && AccountManager::instance()->accounts().isEmpty() && _uriSchemeUrl.isEmpty()
         && !AccountSetupCommandLineManager::instance()->isCommandLineParsed()) {
         qCInfo(lcApplication) << "No configured accounts, ignoring D-Bus activation.";
         _startupCancelled = true;
@@ -1016,6 +1016,8 @@ void Application::slotActivateRequestedMessage(const QStringList &arguments, con
 
 void Application::parseOptions(const QStringList &options)
 {
+    using namespace Qt::StringLiterals;
+
     // Accept both "--option value" and "--option=value" for every option below.
     const auto expandedOptions = Utility::expandCommandLineOptionValues(options);
 
@@ -1073,6 +1075,8 @@ void Application::parseOptions(const QStringList &options)
             _debugMode = true;
         } else if (option == QLatin1String("--background")) {
             _backgroundMode = true;
+        } else if (option == "--dbus-activation"_L1) {
+            _dbusActivation = true;
         } else if (option == QLatin1String("--version") || option == QLatin1String("-v")) {
             _versionOnly = true;
         } else if (option == QLatin1String("--reverse")) {

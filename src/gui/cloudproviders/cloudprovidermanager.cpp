@@ -8,7 +8,6 @@
 #include <cloudprovidersproviderexporter.h>
 
 #include "account.h"
-#include "accountmanager.h"
 #include "cloudproviderconfig.h"
 #include "cloudprovidermanager.h"
 #include "cloudproviderwrapper.h"
@@ -44,8 +43,8 @@ void CloudProviderManager::registerSignals()
 CloudProviderManager::CloudProviderManager(QObject *parent) : QObject(parent)
 {
     _folder_index = 0;
-    connect(AccountManager::instance(), &AccountManager::accountAdded, this, &CloudProviderManager::registerProvider);
-    registerProvider();
+    _busNameOwnerId =
+        g_bus_own_name(G_BUS_TYPE_SESSION, LIBCLOUDPROVIDERS_DBUS_BUS_NAME, G_BUS_NAME_OWNER_FLAGS_NONE, nullptr, on_name_acquired, nullptr, this, nullptr);
 }
 
 CloudProviderManager::~CloudProviderManager()
@@ -54,15 +53,6 @@ CloudProviderManager::~CloudProviderManager()
         g_bus_unown_name(_busNameOwnerId);
         g_clear_object(&_providerExporter);
     }
-}
-
-void CloudProviderManager::registerProvider()
-{
-    if (_busNameOwnerId || AccountManager::instance()->accounts().isEmpty()) {
-        return;
-    }
-    _busNameOwnerId =
-        g_bus_own_name(G_BUS_TYPE_SESSION, LIBCLOUDPROVIDERS_DBUS_BUS_NAME, G_BUS_NAME_OWNER_FLAGS_NONE, nullptr, on_name_acquired, nullptr, this, nullptr);
 }
 
 void CloudProviderManager::slotFolderListChanged(const Folder::Map &folderMap)

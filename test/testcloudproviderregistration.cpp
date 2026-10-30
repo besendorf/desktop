@@ -24,8 +24,6 @@ class TestCloudProviderRegistration : public QObject
 {
     Q_OBJECT
 
-    static constexpr auto _registrationObservationMs = 100;
-
     QTemporaryDir _config;
 
     static bool isRegistered()
@@ -55,11 +53,10 @@ private Q_SLOTS:
         AccountManager::instance()->shutdown();
     }
 
-    void testRegistration_noAccounts_waitsForFirstAccount()
+    void testRegistration_noAccounts_registersImmediately()
     {
         auto provider = std::make_unique<CloudProviderManager>();
-        QTest::qWait(_registrationObservationMs);
-        QVERIFY(!isRegistered());
+        QTRY_VERIFY(isRegistered());
 
         addAccount(u"alice"_s);
         QTRY_VERIFY(isRegistered());

@@ -6,6 +6,13 @@
 #include "config.h"
 #include "theme.h"
 
+#ifdef WITH_LIBCLOUDPROVIDERS
+#include "cloudproviderconfig.h"
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusMessage>
+#endif
+
 #include <QDir>
 #include <QProcess>
 #include <QScopeGuard>
@@ -70,15 +77,20 @@ private Q_SLOTS:
     {
         QTest::addColumn<bool>("hasPreferences");
         QTest::addColumn<bool>("background");
-        QTest::newRow("fresh-install") << false << true;
-        QTest::newRow("preferences-only") << true << true;
-        QTest::newRow("activation-without-background") << false << false;
+        QTest::addColumn<bool>("starterEnvironment");
+        QTest::newRow("fresh-install") << false << true << true;
+        QTest::newRow("preferences-only") << true << true << true;
+        QTest::newRow("activation-without-background") << false << false << true;
+        QTest::newRow("broker-fresh-install") << false << true << false;
+        QTest::newRow("broker-preferences-only") << true << true << false;
+        QTest::newRow("broker-activation-without-background") << false << false << false;
     }
 
     void testStartup_unconfiguredActivation_exitsWithoutGui()
     {
         QFETCH(bool, hasPreferences);
         QFETCH(bool, background);
+        QFETCH(bool, starterEnvironment);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         if (hasPreferences) {
@@ -91,7 +103,11 @@ private Q_SLOTS:
         const auto cleanup = qScopeGuard([&] {
             stopClient(client);
         });
-        startClient(client, directory.path(), true, background ? QStringList{u"--background"_s} : QStringList{}, true);
+        auto options = background ? QStringList{u"--background"_s} : QStringList{};
+        if (!starterEnvironment) {
+            options << u"--dbus-activation"_s;
+        }
+        startClient(client, directory.path(), starterEnvironment, options, true);
         QVERIFY(client.waitForStarted());
         // This must finish before XFCE's 30-second tray wait, without entering the GUI event loop.
         QVERIFY2(client.waitForFinished(_startupTimeoutMs), client.readAll().constData());
@@ -104,9 +120,11 @@ private Q_SLOTS:
         QTest::addColumn<bool>("activated");
         QTest::addColumn<bool>("configured");
         QTest::addColumn<bool>("background");
-        QTest::newRow("manual-first-run") << false << false << false;
-        QTest::newRow("manual-background-first-run") << false << false << true;
-        QTest::newRow("configured-activation") << true << true << true;
+        QTest::addColumn<bool>("activationArgument");
+        QTest::newRow("manual-first-run") << false << false << false << false;
+        QTest::newRow("manual-background-first-run") << false << false << true << false;
+        QTest::newRow("configured-activation") << true << true << true << false;
+        QTest::newRow("broker-configured-activation") << false << true << true << true;
     }
 
     void testStartup_manualOrConfigured_keepsRunning()
@@ -114,6 +132,7 @@ private Q_SLOTS:
         QFETCH(bool, activated);
         QFETCH(bool, configured);
         QFETCH(bool, background);
+        QFETCH(bool, activationArgument);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         if (configured) {
@@ -131,7 +150,11 @@ private Q_SLOTS:
         const auto cleanup = qScopeGuard([&] {
             stopClient(client);
         });
-        startClient(client, directory.path(), activated, background ? QStringList{u"--background"_s} : QStringList{});
+        auto options = background ? QStringList{u"--background"_s} : QStringList{};
+        if (activationArgument) {
+            options << u"--dbus-activation"_s;
+        }
+        startClient(client, directory.path(), activated, options);
         QVERIFY(client.waitForStarted());
         QVERIFY2(!client.waitForFinished(_startupObservationMs), client.readAll().constData());
         QCOMPARE(client.state(), QProcess::Running);
@@ -141,15 +164,20 @@ private Q_SLOTS:
     {
         QTest::addColumn<bool>("loginUri");
         QTest::addColumn<bool>("password");
-        QTest::newRow("command-line-without-password") << false << false;
-        QTest::newRow("command-line-with-password") << false << true;
-        QTest::newRow("login-uri") << true << false;
+        QTest::addColumn<bool>("starterEnvironment");
+        QTest::newRow("command-line-without-password") << false << false << true;
+        QTest::newRow("command-line-with-password") << false << true << true;
+        QTest::newRow("login-uri") << true << false << true;
+        QTest::newRow("broker-command-line-without-password") << false << false << false;
+        QTest::newRow("broker-command-line-with-password") << false << true << false;
+        QTest::newRow("broker-login-uri") << true << false << false;
     }
 
     void testStartup_provisioning_isAllowed()
     {
         QFETCH(bool, loginUri);
         QFETCH(bool, password);
+        QFETCH(bool, starterEnvironment);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         QTcpServer server;
@@ -165,7 +193,10 @@ private Q_SLOTS:
         if (password) {
             options << u"--apppassword"_s << u"test-password"_s;
         }
-        startClient(client, directory.path(), true, options);
+        if (!starterEnvironment) {
+            options << u"--dbus-activation"_s;
+        }
+        startClient(client, directory.path(), starterEnvironment, options);
         QVERIFY(client.waitForStarted());
         if (!loginUri && !password) {
             QVERIFY2(client.waitForFinished(_startupTimeoutMs), client.readAll().constData());
@@ -183,6 +214,31 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), _startupTimeoutMs);
         QCOMPARE(client.state(), QProcess::Running);
     }
+
+#ifdef WITH_LIBCLOUDPROVIDERS
+    void testStartup_manualFirstRun_registersCloudProvider()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QProcess client;
+        const auto cleanup = qScopeGuard([&] {
+            stopClient(client);
+        });
+        startClient(client, directory.path(), false);
+        QVERIFY(client.waitForStarted());
+
+        const auto serviceName = QString::fromLatin1(LIBCLOUDPROVIDERS_DBUS_BUS_NAME);
+        const auto bus = QDBusConnection::sessionBus();
+        QTRY_VERIFY_WITH_TIMEOUT(bus.interface()->isServiceRegistered(serviceName).value(), _startupTimeoutMs);
+        const auto request = QDBusMessage::createMethodCall(serviceName,
+                                                            QString::fromLatin1(LIBCLOUDPROVIDERS_DBUS_OBJECT_PATH),
+                                                            u"org.freedesktop.DBus.ObjectManager"_s,
+                                                            u"GetManagedObjects"_s);
+        const auto reply = bus.call(request, QDBus::Block, _startupTimeoutMs);
+        QVERIFY2(reply.type() == QDBusMessage::ReplyMessage, qPrintable(reply.errorMessage()));
+        QCOMPARE(client.state(), QProcess::Running);
+    }
+#endif
 };
 
 QTEST_GUILESS_MAIN(TestApplicationStartup)
