@@ -18,6 +18,7 @@ class CloudProviderManager : public QObject
     Q_OBJECT
 public:
     explicit CloudProviderManager(QObject *parent = nullptr);
+    ~CloudProviderManager() override;
     void registerSignals();
 
 Q_SIGNALS:
@@ -26,6 +27,9 @@ public Q_SLOTS:
     void slotFolderListChanged(const OCC::Folder::Map &folderMap);
 
 private:
+    void registerProvider();
+
+    unsigned int _busNameOwnerId = 0;
     QMap<QString, CloudProviderWrapper*> _map;
     unsigned int _folder_index;
 };
