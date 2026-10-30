@@ -436,6 +436,18 @@ Application::Application(int &argc, char **argv)
     // create accounts and folders from a legacy desktop client or from the current config file
     setupAccountsAndFolders();
 
+#ifdef Q_OS_LINUX
+    if (!qEnvironmentVariableIsEmpty("DBUS_STARTER_ADDRESS")
+        && AccountManager::instance()->accounts().isEmpty()
+        && _uriSchemeUrl.isEmpty()
+        && !AccountSetupCommandLineManager::instance()->isCommandLineParsed()) {
+        qCInfo(lcApplication) << "No configured accounts, ignoring D-Bus activation.";
+        _startupCancelled = true;
+        AccountSetupCommandLineManager::destroy();
+        return;
+    }
+#endif
+
     if (AccountSetupCommandLineManager::instance()->isCommandLineParsed()) {
         if (!AccountSetupCommandLineManager::instance()->setupAccountFromCommandLine()) {
             qCWarning(lcApplication()) << "setup of the account had some issues and could not be completed";

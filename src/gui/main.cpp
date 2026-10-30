@@ -119,6 +119,10 @@ static int runApplication(int argc, char **argv)
         app.showVersion();
         return 0;
     }
+    if (app.startupCancelled()) {
+        // Report failed activation so D-Bus does not wait for the service-start timeout.
+        return 1;
+    }
 
 // check a environment variable for core dumps
 #ifdef Q_OS_UNIX

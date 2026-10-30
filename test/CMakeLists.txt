@@ -272,6 +272,17 @@ nextcloud_add_benchmark(LargeSync)
 
 nextcloud_add_test(Account)
 nextcloud_add_test(AccountManager)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND BUILD_GUI AND NOT BUILD_LIBRARIES_ONLY)
+    find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
+    if(DBUS_RUN_SESSION_EXECUTABLE)
+        nextcloud_build_test(ApplicationStartup)
+        add_dependencies(ApplicationStartupTest nextcloud)
+        # Give child clients a private session bus, independent of the desktop running CTest.
+        add_test(NAME ApplicationStartupTest
+            COMMAND "${DBUS_RUN_SESSION_EXECUTABLE}" -- "$<TARGET_FILE:ApplicationStartupTest>"
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    endif()
+endif()
 nextcloud_add_test(AccountState)
 nextcloud_add_test(AccountWizardController)
 nextcloud_add_test(BrowserReAuthController)
